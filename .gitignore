@@ -11,3 +11,10 @@ build/
 .DS_Store
 tmp/
 *.log
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+var/
+*.db
+*.sqlite
+*.sqlite3
