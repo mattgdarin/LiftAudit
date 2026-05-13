@@ -1,0 +1,7 @@
+pydantic
+pytest
+rapidfuzz
+openai
+python-dotenv
+langchain-openai
+langgraph
