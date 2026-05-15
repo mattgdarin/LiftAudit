@@ -11,7 +11,7 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 from scipy.stats import linregress
 
-from liftaudit.dbstore.connection import DEFAULT_DB_PATH, connect
+from liftaudit.dbstore.connection import DEFAULT_DB_PATH, connect, connect_readonly
 
 
 DEFAULT_COACHING_MODEL = "gpt-4o-mini"
@@ -88,6 +88,15 @@ def query_lift(lift: str, start_date: date = date.min, most_recent_k: int | None
     ]
 
 
+_SCHEMA_SUMMARY = """
+Tables:
+  workout_sets(id, batch_id, performed_on TEXT, raw_exercise_name, canonical_exercise, sets, reps, weight, unit, rir, notes, created_at)
+  ingestion_batches(id, source_type, source_path, rows_processed, created_at)
+  ingestion_warnings(id, batch_id, row_number, field, message, suggested_correction_json, created_at)
+  unresolved_exercises(id, batch_id, input_name, status, canonical_name, matched_alias, score, created_at)
+"""
+
+
 # --- Tools ---
 
 @tool("list_lifts")
@@ -128,9 +137,24 @@ def max_trend(lift: str, start_date: date) -> TrendResult:
     return compute_trend(lift, points)
 
 
+@tool("query_sql")
+def query_sql(sql: str) -> list[dict]:
+    """Run a read-only SQL SELECT query against the workout database and return rows as dicts.
+
+    Schema:
+      workout_sets(id, batch_id, performed_on, raw_exercise_name, canonical_exercise, sets, reps, weight, unit, rir, notes, created_at)
+      ingestion_batches(id, source_type, source_path, rows_processed, created_at)
+
+    Only SELECT statements are permitted. The connection is read-only at the driver level."""
+    with connect_readonly(DEFAULT_DB_PATH) as conn:
+        cursor = conn.execute(sql)
+        columns = [d[0] for d in cursor.description]
+        return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+
 # --- Agent ---
 
-_tools = [list_lifts, curr_max, max_trend]
+_tools = [list_lifts, curr_max, max_trend, query_sql]
 
 
 def get_coaching_agent():
@@ -153,5 +177,7 @@ def get_coaching_agent():
     graph.add_edge(START, "call_model")
     graph.add_conditional_edges("call_model", route, {"call_tools": "call_tools", END: END})
     graph.add_edge("call_tools", "call_model")
+
+
 
     return graph.compile()

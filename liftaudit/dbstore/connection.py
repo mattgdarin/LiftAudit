@@ -5,6 +5,14 @@ from pathlib import Path
 DEFAULT_DB_PATH = Path("data") / "liftaudit.db"
 
 
+def connect_readonly(db_path: str | Path = DEFAULT_DB_PATH) -> sqlite3.Connection:
+    path = Path(db_path).resolve()
+    uri = f"file:{path}?mode=ro"
+    connection = sqlite3.connect(uri, uri=True)
+    connection.row_factory = sqlite3.Row
+    return connection
+
+
 def connect(db_path: str | Path = DEFAULT_DB_PATH) -> sqlite3.Connection:
     path = Path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -4,11 +4,8 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from liftaudit.ingestion.schemas import ExerciseResolution
+from rapidfuzz import fuzz
 
-try:
-    from rapidfuzz import fuzz
-except ImportError:  # pragma: no cover - exercised only when rapidfuzz is absent
-    fuzz = None
 
 
 KB_PATH = Path(__file__).resolve().parents[1] / "data" / "exercise_kb.json"

@@ -59,7 +59,7 @@ def _map_headers_deterministically(headers: List[str]) -> List[str]:
 
 def _best_header_match(column: str, headers: List[str]) -> tuple[int, float] | None:
     candidates = [
-        (index, fuzz.ratio(column, header))
+        (index, fuzz.token_sort_ratio(column, header))
         for index, header in enumerate(headers)
         if header not in CSV_COLUMNS
     ]
