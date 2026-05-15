@@ -3,6 +3,7 @@ from datetime import date
 from typing import Annotated, Optional, TypedDict
 
 from dotenv import load_dotenv
+from ddgs import DDGS
 from langchain_core.messages import BaseMessage
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
@@ -14,11 +15,39 @@ from scipy.stats import linregress
 from liftaudit.dbstore.connection import DEFAULT_DB_PATH, connect, connect_readonly
 
 
-DEFAULT_COACHING_MODEL = "gpt-4o-mini"
+DEFAULT_COACHING_MODEL = "gpt-5.5"
 
-SYSTEM_PROMPT = """You are a strength coaching assistant. You have access to the user's workout history.
-Use your tools to look up their data before giving advice. Be concise and specific — cite actual numbers.
-Do not invent data. If you don't have enough data to answer, say so."""
+def build_system_prompt() -> str:
+    return f"""You are a strength coach. Direct, data-driven, evidence-based. You've read the research and you've coached lifters through plateaus, injuries, and PRs. You don't sugarcoat and you don't hedge.
+
+# Today
+Today is {date.today().isoformat()}. Resolve relative dates ("last month", "this quarter", "since spring") yourself — do not ask the user.
+
+# How you talk
+- Lead with the actual finding. Skip the throat-clearing.
+- Cite numbers from the user's data: estimated 1RMs, weekly slopes, set counts, frequencies, dates. An analysis without numbers is generic, and generic is worthless.
+- Recommendations are concrete: weight, reps, sets, frequency, exercise. Not "consider adding more volume."
+- Push back when warranted. Undertraining a muscle? Say so. Stalling and piling on volume? Bad idea — tell them.
+
+# Tool discipline
+- Check the user's own data before giving advice. Always. Generic advice is failure.
+- Lift names in the database are canonical snake_case (e.g. `bench_press`, `pull_up`, `overhead_press`, `lateral_raise`). If a tool returns None or empty, call `list_lifts` first to get the exact names — do NOT conclude "no data" until you've checked the names.
+- `max_trend` needs a real `start_date`. For "recent" trends, default to 12 weeks ago. Never use 2023 or earlier unless the user specifies.
+- `web_search` is for general training knowledge: programming, periodization, technique, research consensus. Not for anything the user's own data answers.
+- When you use `web_search`, cite the source URL inline for each claim. Unsupported claims are not allowed.
+
+# Hard rules
+- Never invent numbers. Every number you cite must come from a tool result.
+- Execute every step of your plan. If your plan says `web_search`, do it. Don't substitute generic textbook advice.
+- If the user asks for "an analysis", you owe them: which lifts are strong/weak (with 1RM numbers), which trends are up/down (with slopes and r²), and what to change (with concrete prescriptions).
+- If a tool fails twice and you still have no data, tell the user exactly what you tried and why it failed. Don't fabricate a fallback.
+
+# Answer format
+- Top-line finding first.
+- Numbers from tool output to support it.
+- Concrete recommendations.
+- Inline source citations for any external claim.
+- Length matches the question — terse for terse, deep for deep."""
 
 
 # --- Data types ---
@@ -100,9 +129,15 @@ Tables:
 
 # --- Tools ---
 
+def _log_call(name: str, **kwargs) -> None:
+    args = ", ".join(f"{k}={v!r}" for k, v in kwargs.items())
+    print(f"  → {name}({args})", flush=True)
+
+
 @tool("list_lifts")
 def list_lifts() -> list[str]:
     """Return all distinct exercises recorded in the database."""
+    _log_call("list_lifts")
     with connect(DEFAULT_DB_PATH) as conn:
         rows = conn.execute(
             """
@@ -117,6 +152,7 @@ def list_lifts() -> list[str]:
 @tool("curr_max")
 def curr_max(lift: str, n: int = 5) -> Optional[float]:
     """Returns the estimated current 1RM for a lift, averaged over the n most recent sets."""
+    _log_call("curr_max", lift=lift, n=n)
     data = query_lift(lift, most_recent_k=n)
     maxes = [
         one_rep_max(r["weight"], r["reps"] + (r["rir"] or 0))
@@ -129,6 +165,7 @@ def curr_max(lift: str, n: int = 5) -> Optional[float]:
 @tool("max_trend")
 def max_trend(lift: str, start_date: date) -> TrendResult:
     """Compute estimated 1RM trend for a lift since start_date."""
+    _log_call("max_trend", lift=lift, start_date=start_date)
     rows = query_lift(lift, start_date)
     points = [
         (r["date"], one_rep_max(r["weight"], r["reps"]))
@@ -147,6 +184,7 @@ def query_by_muscle(muscle: str) -> dict:
 
     Returns a dict with keys 'primary' and 'secondary', each a list of sets.
     """
+    _log_call("query_by_muscle", muscle=muscle)
     pattern = f"%{muscle}%"
     with connect_readonly(DEFAULT_DB_PATH) as conn:
         primary = conn.execute(
@@ -182,6 +220,26 @@ def query_by_muscle(muscle: str) -> dict:
     }
 
 
+@tool("web_search")
+def web_search(query: str) -> str:
+    """Search the web for general strength training knowledge: exercise technique, programming principles, periodization, nutrition, etc.
+
+    Use this when the user asks something not answerable from their personal workout data. 
+
+    You may want to favor academic articles and authoritative sources. 
+    If the results don't answer the question, refine your query (more specific terms, different phrasing) and call this tool again.
+    Args:
+        query: search query string
+    """
+    _log_call("web_search", query=query)
+    results = DDGS().text(query, max_results=5)
+    if not results:
+        return "No results found."
+    return "\n\n".join(f"{r['title']} ({r['href']}): {r['body']}" for r in results)
+
+
+
+
 @tool("query_sql")
 def query_sql(sql: str) -> list[dict]:
     """Run a read-only SQL SELECT query against the workout database and return rows as dicts. Only use if other rules do not suffice
@@ -191,6 +249,7 @@ def query_sql(sql: str) -> list[dict]:
       ingestion_batches(id, source_type, source_path, rows_processed, created_at)
 
     Only SELECT statements are permitted. The connection is read-only at the driver level."""
+    _log_call("query_sql", sql=sql)
     with connect_readonly(DEFAULT_DB_PATH) as conn:
         cursor = conn.execute(sql)
         columns = [d[0] for d in cursor.description]
@@ -200,7 +259,7 @@ def query_sql(sql: str) -> list[dict]:
 
 # --- Agent ---
 
-_tools = [list_lifts, curr_max, max_trend, query_by_muscle, query_sql]
+_tools = [list_lifts, curr_max, max_trend, query_by_muscle, query_sql, web_search]
 _tools_str = ', '.join(t.name for t in _tools)
 
 
@@ -212,8 +271,8 @@ Available tools: {_tools_str}"""
 
 def get_coaching_agent():
     load_dotenv()
-    planner = ChatOpenAI(model=DEFAULT_COACHING_MODEL, temperature=0)
-    llm = ChatOpenAI(model=DEFAULT_COACHING_MODEL, temperature=0).bind_tools(_tools)
+    planner = ChatOpenAI(model=DEFAULT_COACHING_MODEL, temperature=0.3)
+    llm = ChatOpenAI(model=DEFAULT_COACHING_MODEL, reasoning={'effort':'high'}, temperature=0.3).bind_tools(_tools)
 
     def plan_node(state: State) -> State:
         last_user = next(
@@ -230,7 +289,7 @@ def get_coaching_agent():
         return {"plan": response.content}
 
     def call_model(state: State) -> State:
-        system = SYSTEM_PROMPT
+        system = build_system_prompt()
         if state.get("plan"):
             system += f"\n\nPlan for this response:\n{state['plan']}"
         messages = [{"role": "system", "content": system}] + state["messages"]

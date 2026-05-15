@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from langchain_core.messages import HumanMessage
 from liftaudit.coaching.agent import State, get_coaching_agent
 
@@ -24,4 +28,10 @@ while True:
         plan=None,
     ))
     messages = state["messages"]
-    print(f"\nCoach: {messages[-1].content}\n")
+    content = messages[-1].content
+    if isinstance(content, list):
+        content = "".join(
+            block.get("text", "") for block in content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+    print(f"\nCoach: {content}\n")
