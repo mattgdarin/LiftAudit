@@ -7,7 +7,6 @@ from liftaudit.ingestion.schemas import ExerciseResolution
 from rapidfuzz import fuzz
 
 
-
 KB_PATH = Path(__file__).resolve().parents[1] / "data" / "exercise_kb.json"
 
 
@@ -36,6 +35,7 @@ class ExerciseResolver:
                 status=status,
                 matched_alias=matched_alias,
                 score=100.0,
+                **self._muscle_data(canonical),
             )
 
         fuzzy_match = self._best_fuzzy_match(normalized)
@@ -47,14 +47,14 @@ class ExerciseResolver:
                 status="fuzzy",
                 matched_alias=matched_alias,
                 score=score,
+                **self._muscle_data(canonical),
             )
 
         return ExerciseResolution(input_name=exercise_name, status="unresolved")
 
-    def _load_kb(self, path: Path) -> List[Dict[str, object]]:
-        with path.open("r", encoding="utf-8") as file:
-            data = json.load(file)
-        return data["exercises"]
+    def _load_kb(self, path: Path) -> List[Dict]:
+        with path.open("r", encoding="utf-8") as f:
+            return json.load(f)["exercises"]
 
     def _build_lookup(self) -> Dict[str, Tuple[str, str, str]]:
         lookup: Dict[str, Tuple[str, str, str]] = {}
@@ -62,31 +62,28 @@ class ExerciseResolver:
             canonical = str(exercise["canonical_name"])
             lookup[normalize_name(canonical)] = (canonical, canonical, "exact")
             for alias in exercise.get("aliases", []):
-                alias_text = str(alias)
-                lookup[normalize_name(alias_text)] = (canonical, alias_text, "alias")
+                lookup[normalize_name(str(alias))] = (canonical, str(alias), "alias")
         return lookup
+
+    def _muscle_data(self, canonical_name: str) -> Dict[str, List[str]]:
+        for exercise in self.exercises:
+            if exercise["canonical_name"] == canonical_name:
+                return {
+                    "target_muscles": exercise.get("target_muscles", []),
+                    "secondary_muscles": exercise.get("secondary_muscles", []),
+                    "body_parts": exercise.get("body_parts", []),
+                }
+        return {"target_muscles": [], "secondary_muscles": [], "body_parts": []}
 
     def _best_fuzzy_match(self, normalized: str) -> Optional[Tuple[str, str, float]]:
         best: Optional[Tuple[str, str, float]] = None
-        for candidate, (canonical, matched_alias, _status) in self._exact_lookup.items():
-            score = self._similarity(normalized, candidate)
+        for candidate, (canonical, matched_alias, _) in self._exact_lookup.items():
+            score = float(fuzz.token_sort_ratio(normalized, candidate))
             if score >= self.fuzzy_threshold and (best is None or score > best[2]):
                 best = (canonical, matched_alias, score)
         return best
-
-    def _similarity(self, left: str, right: str) -> float:
-        if fuzz is not None:
-            return float(fuzz.token_sort_ratio(left, right))
-        return _difflib_ratio(left, right)
-
-
-def _difflib_ratio(left: str, right: str) -> float:
-    from difflib import SequenceMatcher
-
-    return SequenceMatcher(None, left, right).ratio() * 100
 
 
 def resolve_exercise_names(names: Iterable[str]) -> List[ExerciseResolution]:
     resolver = ExerciseResolver()
     return [resolver.resolve(name) for name in names]
-

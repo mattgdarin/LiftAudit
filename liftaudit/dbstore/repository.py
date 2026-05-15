@@ -41,9 +41,11 @@ def save_ingestion_result(
                     weight,
                     unit,
                     rir,
-                    notes
+                    notes,
+                    target_muscles,
+                    secondary_muscles
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     batch_id,
@@ -56,6 +58,8 @@ def save_ingestion_result(
                     workout_set.unit,
                     workout_set.rir,
                     workout_set.notes,
+                    json.dumps(workout_set.resolution.target_muscles) if workout_set.resolution.target_muscles else None,
+                    json.dumps(workout_set.resolution.secondary_muscles) if workout_set.resolution.secondary_muscles else None,
                 ),
             )
 

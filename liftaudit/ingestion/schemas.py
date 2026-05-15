@@ -10,6 +10,9 @@ class ExerciseResolution(BaseModel):
     status: str
     matched_alias: Optional[str] = None
     score: Optional[float] = None
+    target_muscles: List[str] = []
+    secondary_muscles: List[str] = []
+    body_parts: List[str] = []
 
 
 class IngestionWarning(BaseModel):

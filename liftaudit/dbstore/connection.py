@@ -25,7 +25,17 @@ def connect(db_path: str | Path = DEFAULT_DB_PATH) -> sqlite3.Connection:
 def initialize_database(db_path: str | Path = DEFAULT_DB_PATH) -> None:
     with connect(db_path) as connection:
         connection.executescript(SCHEMA_SQL)
+        for stmt in MIGRATION_SQL:
+            try:
+                connection.execute(stmt)
+            except Exception:
+                pass
 
+
+MIGRATION_SQL = [
+    "ALTER TABLE workout_sets ADD COLUMN target_muscles TEXT",
+    "ALTER TABLE workout_sets ADD COLUMN secondary_muscles TEXT",
+]
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS ingestion_batches (
@@ -48,9 +58,12 @@ CREATE TABLE IF NOT EXISTS workout_sets (
     unit TEXT NOT NULL,
     rir REAL,
     notes TEXT,
+    target_muscles TEXT,
+    secondary_muscles TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (batch_id) REFERENCES ingestion_batches(id) ON DELETE CASCADE
 );
+
 
 CREATE TABLE IF NOT EXISTS ingestion_warnings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

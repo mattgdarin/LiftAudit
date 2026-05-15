@@ -1,0 +1,27 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "enrich_kb",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/enrich_kb.py",
+            "python": "${workspaceFolder}/.venv/bin/python3.12",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "run_coaching_agent",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/run_coaching_agent.py",
+            "python": "${workspaceFolder}/.venv/bin/python3.12",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "console": "integratedTerminal"
+        }
+    ]
+}

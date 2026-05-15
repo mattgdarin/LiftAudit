@@ -1,4 +1,5 @@
 pydantic
+requests
 pytest
 rapidfuzz
 openai

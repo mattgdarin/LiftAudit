@@ -39,6 +39,7 @@ class State(TypedDict):
     strengths: list[str]
     weaknesses: list[str]
     active_lifts: list[str]
+    plan: str | None
 
 
 # --- Pure helpers ---
@@ -137,9 +138,53 @@ def max_trend(lift: str, start_date: date) -> TrendResult:
     return compute_trend(lift, points)
 
 
+@tool("query_by_muscle")
+def query_by_muscle(muscle: str) -> dict:
+    """Return all sets where a muscle is trained, split into primary and secondary.
+
+    Args:
+        muscle: muscle name to search for (e.g. 'Chest', 'Quads', 'Glutes')
+
+    Returns a dict with keys 'primary' and 'secondary', each a list of sets.
+    """
+    pattern = f"%{muscle}%"
+    with connect_readonly(DEFAULT_DB_PATH) as conn:
+        primary = conn.execute(
+            """
+            SELECT performed_on, canonical_exercise, sets, reps, weight, unit, rir, target_muscles
+            FROM workout_sets
+            WHERE target_muscles LIKE ?
+            ORDER BY performed_on ASC
+            """,
+            (pattern,),
+        ).fetchall()
+        secondary = conn.execute(
+            """
+            SELECT performed_on, canonical_exercise, sets, reps, weight, unit, rir, secondary_muscles
+            FROM workout_sets
+            WHERE secondary_muscles LIKE ?
+              AND (target_muscles NOT LIKE ? OR target_muscles IS NULL)
+            ORDER BY performed_on ASC
+            """,
+            (pattern, pattern),
+        ).fetchall()
+
+    def row_to_dict(r, muscle_key):
+        return {
+            "date": r[0], "exercise": r[1], "sets": r[2],
+            "reps": r[3], "weight": r[4], "unit": r[5],
+            "rir": r[6], muscle_key: r[7],
+        }
+
+    return {
+        "primary": [row_to_dict(r, "target_muscles") for r in primary],
+        "secondary": [row_to_dict(r, "secondary_muscles") for r in secondary],
+    }
+
+
 @tool("query_sql")
 def query_sql(sql: str) -> list[dict]:
-    """Run a read-only SQL SELECT query against the workout database and return rows as dicts.
+    """Run a read-only SQL SELECT query against the workout database and return rows as dicts. Only use if other rules do not suffice
 
     Schema:
       workout_sets(id, batch_id, performed_on, raw_exercise_name, canonical_exercise, sets, reps, weight, unit, rir, notes, created_at)
@@ -152,17 +197,43 @@ def query_sql(sql: str) -> list[dict]:
         return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
 
+
 # --- Agent ---
 
-_tools = [list_lifts, curr_max, max_trend, query_sql]
+_tools = [list_lifts, curr_max, max_trend, query_by_muscle, query_sql]
+_tools_str = ', '.join(t.name for t in _tools)
+
+
+PLAN_PROMPT = f"""You are a planning assistant for a strength coaching agent.
+Given the user's message, write a brief step-by-step plan for how to answer it.
+Identify which tools are needed and in what order. Be concise — 2 to 4 steps max.
+Available tools: {_tools_str}"""
 
 
 def get_coaching_agent():
     load_dotenv()
+    planner = ChatOpenAI(model=DEFAULT_COACHING_MODEL, temperature=0)
     llm = ChatOpenAI(model=DEFAULT_COACHING_MODEL, temperature=0).bind_tools(_tools)
 
+    def plan_node(state: State) -> State:
+        last_user = next(
+            (m for m in reversed(state["messages"]) if m.type == "human"), None
+        )
+        if last_user is None:
+            return {"plan": None}
+        response = planner.invoke([
+            {"role": "system", "content": PLAN_PROMPT},
+            {"role": "user", "content": last_user.content},
+        ])
+
+        print(response.content)
+        return {"plan": response.content}
+
     def call_model(state: State) -> State:
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}] + state["messages"]
+        system = SYSTEM_PROMPT
+        if state.get("plan"):
+            system += f"\n\nPlan for this response:\n{state['plan']}"
+        messages = [{"role": "system", "content": system}] + state["messages"]
         return {"messages": [llm.invoke(messages)]}
 
     def route(state: State) -> str:
@@ -172,12 +243,12 @@ def get_coaching_agent():
         return END
 
     graph = StateGraph(State)
+    graph.add_node("plan_node", plan_node)
     graph.add_node("call_model", call_model)
     graph.add_node("call_tools", ToolNode(_tools))
-    graph.add_edge(START, "call_model")
+    graph.add_edge(START, "plan_node")
+    graph.add_edge("plan_node", "call_model")
     graph.add_conditional_edges("call_model", route, {"call_tools": "call_tools", END: END})
     graph.add_edge("call_tools", "call_model")
-
-
 
     return graph.compile()

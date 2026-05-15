@@ -3,38 +3,122 @@
     {
       "canonical_name": "bench_press",
       "display_name": "Bench Press",
-      "aliases": ["bench", "barbell bench press", "flat bench"]
+      "aliases": [
+        "bench",
+        "barbell bench press",
+        "flat bench"
+      ],
+      "target_muscles": [
+        "Chest"
+      ],
+      "secondary_muscles": [
+        "Shoulders",
+        "Triceps"
+      ],
+      "body_parts": [
+        "Chest"
+      ]
     },
     {
       "canonical_name": "squat",
       "display_name": "Squat",
-      "aliases": ["back squat", "barbell squat"]
+      "aliases": [
+        "back squat",
+        "barbell squat"
+      ],
+      "target_muscles": [
+        "Quads"
+      ],
+      "secondary_muscles": [
+        "Glutes"
+      ],
+      "body_parts": [
+        "Legs"
+      ]
     },
     {
       "canonical_name": "deadlift",
       "display_name": "Deadlift",
-      "aliases": ["conventional deadlift", "dl"]
+      "aliases": [
+        "conventional deadlift",
+        "dl"
+      ],
+      "target_muscles": [
+        "Lats"
+      ],
+      "secondary_muscles": [
+        "Glutes"
+      ],
+      "body_parts": [
+        "Back"
+      ]
     },
     {
       "canonical_name": "overhead_press",
       "display_name": "Overhead Press",
-      "aliases": ["ohp", "shoulder press", "barbell overhead press"]
+      "aliases": [
+        "ohp",
+        "shoulder press",
+        "barbell overhead press"
+      ],
+      "target_muscles": [
+        "Shoulders"
+      ],
+      "secondary_muscles": [],
+      "body_parts": [
+        "Chest"
+      ]
     },
     {
       "canonical_name": "lateral_raise",
       "display_name": "Lateral Raise",
-      "aliases": ["lat raise", "side lateral raise", "db lateral raise"]
+      "aliases": [
+        "lat raise",
+        "side lateral raise",
+        "db lateral raise"
+      ],
+      "target_muscles": [
+        "Shoulders"
+      ],
+      "secondary_muscles": [],
+      "body_parts": [
+        "Shoulders"
+      ]
     },
     {
       "canonical_name": "pull_up",
       "display_name": "Pull-Up",
-      "aliases": ["pullup", "pull ups", "pull-ups"]
+      "aliases": [
+        "pullup",
+        "pull ups",
+        "pull-ups"
+      ],
+      "target_muscles": [
+        "Lats"
+      ],
+      "secondary_muscles": [
+        "Shoulders",
+        "Biceps"
+      ],
+      "body_parts": [
+        "Back"
+      ]
     },
     {
       "canonical_name": "barbell_row",
       "display_name": "Barbell Row",
-      "aliases": ["row", "bent over row", "bb row"]
+      "aliases": [
+        "row",
+        "bent over row",
+        "bb row"
+      ],
+      "target_muscles": [
+        "Lats"
+      ],
+      "secondary_muscles": [],
+      "body_parts": [
+        "Back"
+      ]
     }
   ]
 }
-

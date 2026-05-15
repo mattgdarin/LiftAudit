@@ -21,6 +21,7 @@ while True:
         strengths=[],
         weaknesses=[],
         active_lifts=[],
+        plan=None,
     ))
     messages = state["messages"]
     print(f"\nCoach: {messages[-1].content}\n")
